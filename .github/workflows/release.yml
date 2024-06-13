@@ -28,8 +28,8 @@ jobs:
             - name: Build
               shell: pwsh
               run: |
-                  dotnet publish Flow.Launcher.Plugin.IPDetails/Flow.Launcher.Plugin.IPDetails.csproj -c Release -o "Flow.Launcher.Plugin.IPDetails"
-                  Compress-Archive -Path Flow.Launcher.Plugin.IPDetails/Flow.Launcher.Plugin.IPDetails/Flow.Launcher.Plugin.IPDetails/* -DestinationPath Flow.Launcher.Plugin.IPDetails.zip -Force
+                  dotnet publish Flow.Launcher.Plugin.IPDetails/Flow.Launcher.Plugin.IPDetails.csproj -c Release -o Output
+                  Compress-Archive -Path Output/* -DestinationPath Flow.Launcher.Plugin.IPDetails.zip -Force
 
             - name: Publish
               uses: softprops/action-gh-release@v1
