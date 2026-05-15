@@ -143,6 +143,4 @@ public class LocationInfo
     [JsonPropertyName("local_time_unix")] public long LocalTimeUnix { get; set; }
 
     [JsonPropertyName("is_dst")] public bool IsDst { get; set; }
-
-    [JsonPropertyName("accuracy")] public string Accuracy { get; set; }
 }
