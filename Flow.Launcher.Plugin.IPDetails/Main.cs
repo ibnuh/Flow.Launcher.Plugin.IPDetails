@@ -256,14 +256,21 @@ namespace Flow.Launcher.Plugin.IPDetails
 
             if (!File.Exists(_cacheFilePath))
             {
-                // Create an empty cache file
-                File.WriteAllText(_cacheFilePath, "{}");
-
                 return false;
             }
 
-            var cacheData =
-                JsonSerializer.Deserialize<Dictionary<string, CachedIpApiResponse>>(File.ReadAllText(_cacheFilePath));
+            Dictionary<string, CachedIpApiResponse> cacheData;
+            try
+            {
+                cacheData = JsonSerializer.Deserialize<Dictionary<string, CachedIpApiResponse>>(
+                    File.ReadAllText(_cacheFilePath), JsonSerializerOptions);
+            }
+            catch (JsonException)
+            {
+                // Cache file is invalid or uses an outdated model
+                File.Delete(_cacheFilePath);
+                return false;
+            }
 
             if (cacheData == null || !cacheData.TryGetValue(url, out var cachedEntry))
             {
@@ -271,22 +278,27 @@ namespace Flow.Launcher.Plugin.IPDetails
             }
 
             // Remove all expired cache entries
+            var keysToRemove = new List<string>();
             foreach (var (key, value) in cacheData)
             {
                 if (DateTime.UtcNow - value.Timestamp >= CacheExpiration)
                 {
-                    cacheData.Remove(key);
+                    keysToRemove.Add(key);
                 }
+            }
+
+            foreach (var key in keysToRemove)
+            {
+                cacheData.Remove(key);
             }
 
             if (DateTime.UtcNow - cachedEntry.Timestamp < CacheExpiration)
             {
                 cachedResponse = cachedEntry.Response;
-
                 return true;
             }
 
-            File.WriteAllText(_cacheFilePath, JsonSerializer.Serialize(cacheData));
+            File.WriteAllText(_cacheFilePath, JsonSerializer.Serialize(cacheData, JsonSerializerOptions));
 
             return false;
         }
@@ -297,10 +309,15 @@ namespace Flow.Launcher.Plugin.IPDetails
 
             if (File.Exists(_cacheFilePath))
             {
-                cacheData =
-                    JsonSerializer
-                        .Deserialize<Dictionary<string, CachedIpApiResponse>>(File.ReadAllText(_cacheFilePath)) ??
-                    new Dictionary<string, CachedIpApiResponse>();
+                try
+                {
+                    cacheData = JsonSerializer.Deserialize<Dictionary<string, CachedIpApiResponse>>(
+                        File.ReadAllText(_cacheFilePath), JsonSerializerOptions) ?? new Dictionary<string, CachedIpApiResponse>();
+                }
+                catch (JsonException)
+                {
+                    cacheData = new Dictionary<string, CachedIpApiResponse>();
+                }
             }
             else
             {
@@ -313,7 +330,7 @@ namespace Flow.Launcher.Plugin.IPDetails
                 Response = response
             };
 
-            File.WriteAllText(_cacheFilePath, JsonSerializer.Serialize(cacheData));
+            File.WriteAllText(_cacheFilePath, JsonSerializer.Serialize(cacheData, JsonSerializerOptions));
         }
 
         private static bool IsPrivateOrBogonIp(IPAddress ip)
