@@ -144,5 +144,5 @@ public class LocationInfo
 
     [JsonPropertyName("is_dst")] public bool IsDst { get; set; }
 
-    [JsonPropertyName("accuracy")] public int Accuracy { get; set; }
+    [JsonPropertyName("accuracy")] public string Accuracy { get; set; }
 }
