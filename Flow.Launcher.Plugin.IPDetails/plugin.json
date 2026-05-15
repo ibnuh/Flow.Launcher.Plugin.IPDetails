@@ -4,7 +4,7 @@
     "Name": "IP Details",
     "Description": "Retrieve current public IP details/lookup or by providing an IP address. Optionally, include an API key for ipapi.is to take advantage of up to 1000 free requests per day.",
     "Author": "ibnuh",
-    "Version": "1.0.1",
+    "Version": "1.0.2",
     "Language": "csharp",
     "Website": "https://github.com/ibnuh/Flow.Launcher.Plugin.IPDetails",
     "IcoPath": "images/icon.png",
