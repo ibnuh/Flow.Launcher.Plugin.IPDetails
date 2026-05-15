@@ -2,8 +2,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
 
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
-
 namespace Flow.Launcher.Plugin.IPDetails;
 
 /// <summary>
