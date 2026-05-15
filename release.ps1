@@ -12,10 +12,11 @@ if (Get-Process -Name Flow.Launcher -ErrorAction SilentlyContinue) {
 }
 
 # Define the destination path for the plugin
-$pluginPath = Join-Path $env:APPDATA "FlowLauncher/Plugins/IPDetails-1.0.0"
+$pluginPath = Join-Path $env:APPDATA "FlowLauncher/Plugins/IP Details"
 
 # Copy the publish folder to the plugin folder for testing
-Copy-Item -Path "$publishPath/*" -Destination $pluginPath -Recurse -Force
+if (Test-Path $pluginPath) { Remove-Item $pluginPath -Recurse -Force -Confirm:$false }
+Copy-Item -Path $publishPath -Destination $pluginPath -Recurse
 
 # Start the Flow Launcher process
 $flowLauncherPath = Join-Path $env:LOCALAPPDATA "FlowLauncher/Flow.Launcher.exe"
