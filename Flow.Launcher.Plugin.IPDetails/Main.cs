@@ -267,8 +267,7 @@ namespace Flow.Launcher.Plugin.IPDetails
             }
             catch (JsonException)
             {
-                // Cache file is invalid or uses an outdated model
-                File.Delete(_cacheFilePath);
+                try { File.Delete(_cacheFilePath); } catch { }
                 return false;
             }
 
