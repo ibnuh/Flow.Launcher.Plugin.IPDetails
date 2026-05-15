@@ -2,7 +2,7 @@ name: Publish
 
 on:
     push:
-        branches: ['main']
+        tags: ['v*']
 
 jobs:
     build:
@@ -20,6 +20,17 @@ jobs:
                   path: Flow.Launcher.Plugin.IPDetails/plugin.json
                   prop_path: Version
 
+            - name: Verify tag matches plugin.json version
+              shell: pwsh
+              run: |
+                  $tag = '${{ github.ref_name }}'
+                  $version = 'v${{ steps.version.outputs.prop }}'
+                  if ($tag -ne $version) {
+                      Write-Error "Tag '$tag' does not match plugin.json Version '$version'. Bump plugin.json Version to match the tag before tagging a release."
+                      exit 1
+                  }
+                  Write-Host "Tag '$tag' matches plugin.json Version."
+
             - name: Setup .NET
               uses: actions/setup-dotnet@v3
               with:
@@ -35,6 +46,6 @@ jobs:
               uses: softprops/action-gh-release@v1
               with:
                   files: Flow.Launcher.Plugin.IPDetails.zip
-                  tag_name: v${{steps.version.outputs.prop}}
+                  tag_name: ${{ github.ref_name }}
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
