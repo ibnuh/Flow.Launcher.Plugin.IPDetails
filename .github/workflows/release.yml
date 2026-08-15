@@ -12,6 +12,19 @@ jobs:
 
         steps:
             - uses: actions/checkout@v3
+              with:
+                  fetch-depth: 0
+
+            - name: Require tag commit on main
+              shell: pwsh
+              run: |
+                  git fetch origin main
+                  git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+                  if ($LASTEXITCODE -ne 0) {
+                      Write-Error "Tag '$env:GITHUB_REF_NAME' ($env:GITHUB_SHA) is not on main. Merge to main first, then tag."
+                      exit 1
+                  }
+                  Write-Host "Tag '$env:GITHUB_REF_NAME' is on main."
 
             - name: Get version
               id: version
