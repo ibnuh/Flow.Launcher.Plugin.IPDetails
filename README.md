@@ -2,7 +2,7 @@
 
 A plugin for the [Flow launcher](https://github.com/Flow-Launcher/Flow.Launcher).
 
-Retrieve current public IP details/lookup or by providing an IP address. Optionally, include an API key for ipapi.is to take advantage of up to 1000 free requests per day.
+Retrieve current public IP details/lookup or by providing an IP address.
 
 IP requests are cached for 24 hours to disk inside the Flow Launcher plugin directory to prevent unnecessary requests to the API and to speed up the response time.
 
@@ -14,12 +14,6 @@ IP requests are cached for 24 hours to disk inside the Flow Launcher plugin dire
 | ------------------- | ------------------------------------------------ |
 | `ip`                | Get the Public IP address of the current machine |
 | `ip <ipv4-address>` | Get the Public IP address of the specified IPv4  |
-
-## Plugin Settings
-
-An optional API Key field is provided in the settings to get more free requests for Public IP lookup. Sign up to [api.ipapi.is](https://ipapi.is) to get the API key.
-
-![Plugin Settings](screenshots/settings.png)
 
 ## Development
 
@@ -37,8 +31,7 @@ directory. This script will allow you to test the plugin by doing these steps:
 
 ## Integrations
 
-1. [api.ipapi.is](https://ipapi.is)
-2. [ipv4.icanhazip.com](https://ipv4.icanhazip.com)
+1. [api.ipquery.io](https://ipquery.io)
 
 ## Icons
 

@@ -8,18 +8,15 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using Flow.Launcher.Plugin.IPDetails.Settings;
 using Flow.Launcher.Plugin.SharedCommands;
 
 namespace Flow.Launcher.Plugin.IPDetails
 {
     /// <inheritdoc cref="Flow.Launcher.Plugin.IAsyncPlugin" />
-    /// <inheritdoc cref="Flow.Launcher.Plugin.ISettingProvider" />
-    public class Main : IAsyncPlugin, ISettingProvider
+    public class Main : IAsyncPlugin
     {
         private PluginInitContext Context { get; set; }
-        private static readonly HttpClient HttpClient = new();
+        private static readonly HttpClient HttpClient = CreateHttpClient();
 
         /// <summary>
         /// <a href="https://www.flaticon.com/free-icons/ip" title="IP icons">IP icons created by Design Circle - Flaticon</a>
@@ -27,24 +24,27 @@ namespace Flow.Launcher.Plugin.IPDetails
         private const string Icon = "images/icon.png";
 
         private static string _cacheFilePath;
-        private static Settings.Settings _settings;
 
         private static readonly TimeSpan CacheExpiration = TimeSpan.FromDays(1);
 
-        private static readonly JsonSerializerOptions JsonSerializerOptions = new()
+        private static readonly JsonSerializerOptions JsonSerializerOptions = new();
+
+        private static HttpClient CreateHttpClient()
         {
-            Converters = { new IsVpnConverter() }
-        };
+            var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation(
+                "User-Agent",
+                "Flow.Launcher.Plugin.IPDetails/1.1");
+            return client;
+        }
 
         /// <inheritdoc />
         public Task InitAsync(PluginInitContext context)
         {
             Context = context;
 
-            _settings = context.API.LoadSettingJsonStorage<Settings.Settings>();
-
             _cacheFilePath =
-                Path.Combine(Context.CurrentPluginMetadata.PluginDirectory, "cache/ipapi_cache.json");
+                Path.Combine(Context.CurrentPluginMetadata.PluginDirectory, "cache/ipquery_cache.json");
 
             Directory.CreateDirectory(Path.GetDirectoryName(_cacheFilePath)!);
 
@@ -54,22 +54,20 @@ namespace Flow.Launcher.Plugin.IPDetails
         /// <inheritdoc />
         public async Task<List<Result>> QueryAsync(Query query, CancellationToken cancellationToken)
         {
-            var results = new List<Result>
-            {
-                new()
-                {
-                    Title = "Fetching IP details...",
-                    SubTitle = "Please wait",
-                    IcoPath = Icon
-                }
-            };
+            var results = new List<Result>();
 
             try
             {
-                var response = await FetchIpApiResponse(await GenerateUrl(query.Search));
+                var response = await FetchIpApiResponse(GenerateUrl(query.Search), cancellationToken);
 
-                // Remove the initial placeholder result
-                results.RemoveAt(0);
+                if (string.IsNullOrWhiteSpace(response?.Ip))
+                {
+                    throw new InvalidOperationException("Provider returned an empty IP address.");
+                }
+
+                var locationInfo = response.Location ?? new LocationInfo();
+                var ispInfo = response.Isp ?? new IspInfo();
+                var riskInfo = response.Risk ?? new RiskInfo();
 
                 results.Add(new Result
                 {
@@ -81,55 +79,66 @@ namespace Flow.Launcher.Plugin.IPDetails
                 });
 
                 var location = string.Join(", ",
-                    new[] { response.Location.City, response.Location.State, response.Location.Country }
+                    new[] { locationInfo.City, locationInfo.State, locationInfo.Country }
                         .Where(l => !string.IsNullOrEmpty(l)));
 
-                results.Add(new Result
+                if (!string.IsNullOrEmpty(location))
                 {
-                    Title = location,
-                    SubTitle = "Location",
-                    IcoPath = Icon,
-                    Action = CreateCopyAction(location),
-                    Score = 98
-                });
+                    results.Add(new Result
+                    {
+                        Title = location,
+                        SubTitle = "Location",
+                        IcoPath = Icon,
+                        Action = CreateCopyAction(location),
+                        Score = 98
+                    });
+                }
 
-                results.Add(new Result
+                if (!string.IsNullOrEmpty(ispInfo.DisplayName))
                 {
-                    Title = response.Asn.Org,
-                    SubTitle = "ISP",
-                    IcoPath = Icon,
-                    Action = CreateCopyAction(response.Asn.Org),
-                    Score = 97
-                });
+                    results.Add(new Result
+                    {
+                        Title = ispInfo.DisplayName,
+                        SubTitle = "ISP",
+                        IcoPath = Icon,
+                        Action = CreateCopyAction(ispInfo.DisplayName),
+                        Score = 97
+                    });
+                }
 
-                results.Add(new Result
+                if (!string.IsNullOrEmpty(ispInfo.Asn))
                 {
-                    Title = response.Location.Timezone,
-                    SubTitle = "Timezone / " + response.Location.LocalTime,
-                    IcoPath = Icon,
-                    Action = CreateCopyAction(response.Location.Timezone),
-                    Score = 96
-                });
+                    results.Add(new Result
+                    {
+                        Title = ispInfo.Asn,
+                        SubTitle = string.IsNullOrEmpty(ispInfo.Org) ? "ASN" : "ASN / " + ispInfo.Org,
+                        IcoPath = Icon,
+                        Action = CreateCopyAction(ispInfo.Asn),
+                        Score = 96
+                    });
+                }
 
-                var isVpnFromBoolean = response.IsVpn is true;
-                var isVpnProviderAvailable = response.IsVpn is string;
-
-                var isVpnString = isVpnFromBoolean
-                    ? "VPN"
-                    : isVpnProviderAvailable
-                        ? response.IsVpn.ToString()
-                        : string.Empty;
+                if (!string.IsNullOrEmpty(locationInfo.Timezone))
+                {
+                    results.Add(new Result
+                    {
+                        Title = locationInfo.Timezone,
+                        SubTitle = string.IsNullOrEmpty(locationInfo.LocalTimeDisplay)
+                            ? "Timezone"
+                            : "Timezone / " + locationInfo.LocalTimeDisplay,
+                        IcoPath = Icon,
+                        Action = CreateCopyAction(locationInfo.Timezone),
+                        Score = 95
+                    });
+                }
 
                 var flags = new (string Title, bool IsValid, string Subtitle)[]
                 {
-                    ("Bogon", response.IsBogon, "IP is bogon (non-routable)"),
-                    ("Mobile", response.IsMobile, "IP is mobile (belongs to a mobile ISP)"),
-                    ("Crawler", response.IsCrawler, "IP belongs to a crawler / spider / good bot"),
-                    ("Datacenter", response.IsDatacenter, "IP belongs to a Hosting Provider / Datacenter"),
-                    ("Tor", response.IsTor, "IP is a TOR exit node"),
-                    ("Proxy", response.IsProxy, "IP is a proxy"),
-                    (isVpnString, isVpnFromBoolean || isVpnProviderAvailable, "IP is a VPN"),
-                    ("Abuser", response.IsAbuser, "IP detected as an abuser / attacker")
+                    ("Mobile", riskInfo.IsMobile, "IP is mobile (belongs to a mobile ISP)"),
+                    ("Datacenter", riskInfo.IsDatacenter, "IP belongs to a Hosting Provider / Datacenter"),
+                    ("Tor", riskInfo.IsTor, "IP is a TOR exit node"),
+                    ("Proxy", riskInfo.IsProxy, "IP is a proxy"),
+                    ("VPN", riskInfo.IsVpn, "IP is a VPN")
                 };
 
                 results.AddRange(flags.Where(flag => flag.IsValid)
@@ -139,20 +148,36 @@ namespace Flow.Launcher.Plugin.IPDetails
                         SubTitle = flag.Subtitle,
                         IcoPath = Icon,
                         Action = CreateCopyAction(flag.Subtitle),
-                        Score = 95
+                        Score = 94
                     }));
 
-                var googleMapsLink = GenerateGoogleMapsLink(response.Location.LatitudeFormatted,
-                    response.Location.LongitudeFormatted);
-
-                results.Add(new Result
+                if (riskInfo.RiskScore > 0)
                 {
-                    Title =
-                        $"Latitude: {response.Location.LatitudeFormatted}, Longitude: {response.Location.LongitudeFormatted}",
-                    SubTitle = "Click to view coordinate on Google Maps",
-                    IcoPath = Icon,
-                    Action = CreateOpenBrowserAction(googleMapsLink),
-                });
+                    var riskTitle = $"Risk score: {riskInfo.RiskScore}";
+                    results.Add(new Result
+                    {
+                        Title = riskTitle,
+                        SubTitle = "Provider risk score for this IP",
+                        IcoPath = Icon,
+                        Action = CreateCopyAction(riskTitle),
+                        Score = 93
+                    });
+                }
+
+                if (locationInfo.HasCoordinates)
+                {
+                    var googleMapsLink = GenerateGoogleMapsLink(locationInfo.LatitudeFormatted,
+                        locationInfo.LongitudeFormatted);
+
+                    results.Add(new Result
+                    {
+                        Title =
+                            $"Latitude: {locationInfo.LatitudeFormatted}, Longitude: {locationInfo.LongitudeFormatted}",
+                        SubTitle = "Click to view coordinate on Google Maps",
+                        IcoPath = Icon,
+                        Action = CreateOpenBrowserAction(googleMapsLink),
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -191,24 +216,25 @@ namespace Flow.Launcher.Plugin.IPDetails
             return $"https://www.google.com/maps?q={latitude},{longitude}";
         }
 
-        private static async Task<string> GenerateUrl(string ip)
+        private static string GenerateUrl(string ip)
         {
             var (isValid, ipFormatted) = IsValidIPv4(ip);
 
             if (string.IsNullOrEmpty(ip) || !isValid)
             {
-                ipFormatted = (await HttpClient.GetStringAsync("http://ipv4.icanhazip.com")).Trim();
+                return "https://api.ipquery.io/?format=json";
             }
 
-            var apiKeyQueryString = string.IsNullOrEmpty(_settings.ApiKey)
-                ? string.Empty
-                : $"&key={_settings.ApiKey}";
-
-            return $"https://api.ipapi.is/?q={ipFormatted}{apiKeyQueryString}";
+            return $"https://api.ipquery.io/{ipFormatted}";
         }
 
         private static (bool, string) IsValidIPv4(string ipString)
         {
+            if (string.IsNullOrWhiteSpace(ipString))
+            {
+                return (false, string.Empty);
+            }
+
             var splitValues = ipString.Split('.');
 
             if (splitValues.Length != 4)
@@ -234,16 +260,21 @@ namespace Flow.Launcher.Plugin.IPDetails
             return (true, ipAddress.ToString());
         }
 
-        private static async Task<IpApiResponse> FetchIpApiResponse(string url)
+        private static async Task<IpApiResponse> FetchIpApiResponse(string url, CancellationToken cancellationToken)
         {
             if (TryGetCachedResponse(url, out IpApiResponse cachedResponse))
             {
                 return cachedResponse;
             }
 
-            var responseString = await HttpClient.GetStringAsync(url);
+            var responseString = await HttpClient.GetStringAsync(url, cancellationToken);
 
             var apiResponse = JsonSerializer.Deserialize<IpApiResponse>(responseString, JsonSerializerOptions);
+
+            if (apiResponse == null || string.IsNullOrWhiteSpace(apiResponse.Ip))
+            {
+                throw new InvalidOperationException("Could not parse IP details from provider.");
+            }
 
             CacheResponse(url, apiResponse);
 
@@ -349,12 +380,6 @@ namespace Flow.Launcher.Plugin.IPDetails
                 default:
                     return false;
             }
-        }
-
-        /// <inheritdoc />
-        public Control CreateSettingPanel()
-        {
-            return new SettingsControl(_settings);
         }
     }
 }
